@@ -105,6 +105,9 @@ class _Handler(BaseHTTPRequestHandler):
 
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
+    # Default backlog is 5. Windows refuses connections beyond the backlog
+    # (Linux queues them), and several browsers starting at once open more.
+    request_queue_size = 256
 
     def handle_error(self, request, client_address):
         import sys

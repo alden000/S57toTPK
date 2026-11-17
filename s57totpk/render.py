@@ -173,7 +173,7 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
     view = opts.block * 256 + 2 * opts.margin
     if view * opts.ratio > 8192:
         raise ValueError(f"block {opts.block} x tile size {opts.tile_size} needs a canvas over 8192 px")
-    nworkers = opts.workers or auto_workers()
+    nworkers = max(1, min(opts.workers or auto_workers(), len(todo)))
     pool = ThreadPoolExecutor(max_workers=2)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
@@ -202,7 +202,8 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                 ctx = await b.new_context(viewport={"width": view, "height": view},
                                           device_scale_factor=opts.ratio)
                 page = await ctx.new_page()
-                page.on("console", lambda m: m.type in ("error", "warning") and log(f"  [page {slot}] {m.text}"))
+                page.on("console", lambda m: m.type in ("error", "warning")
+                        and "GL Driver Message" not in m.text and log(f"  [page {slot}] {m.text}"))
                 page.on("crash", lambda *_: log(f"  [page {slot}] renderer crashed (out of memory or GPU failure?)"))
                 page.on("pageerror", lambda e: log(f"  [page {slot}] {e}"))
                 await page.goto(srv.url + "/index.html")
@@ -216,12 +217,30 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                     log(f"  WebGL renderer: {gl}" + ("  (software rendering)" if "SwiftShader" in str(gl) else ""))
                 return page
 
+            async def open_page(wid):
+                last = None
+                for attempt in range(3):
+                    try:
+                        return await new_page(wid)
+                    except Exception as e:  # noqa: BLE001 - page did not load: try a fresh one
+                        last = e
+                        log(f"  [page {wid}] start-up failed: {str(e).splitlines()[0]} (attempt {attempt + 1})")
+                        b = browsers.pop(wid, None)
+                        if b is not None:
+                            try:
+                                await b.close()
+                            except Exception:  # noqa: BLE001
+                                pass
+                raise RuntimeError(f"render page {wid} could not start: {last}")
+
             async def worker(wid):
-                page = await new_page(wid)
+                page = None
                 while not queue.empty():
                     if stop_event is not None and stop_event.is_set():
                         return
                     z, bx, by = queue.get_nowait()
+                    if page is None:  # start a browser only when there is work for it
+                        page = await open_page(wid)
                     cx = (bx * opts.block + opts.block / 2)
                     cy = (by * opts.block + opts.block / 2)
                     lon, lat = tile_to_lonlat(cx, cy, z)
@@ -236,7 +255,7 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                                 await page.context.close()
                             except Exception:  # noqa: BLE001
                                 pass
-                            page = await new_page(wid)
+                            page = await open_page(wid)
                     else:
                         raise RuntimeError(f"block z{z} {bx},{by} failed 3 times")
                     res = await loop.run_in_executor(pool, _collect_block, tiles_js, opts, z, bx, by)
