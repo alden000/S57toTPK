@@ -23,7 +23,8 @@ This writes `D:\charts\work\ENC.tpkx`. It covers zoom 9–16 at 512 px
 --package tpkx,tpk               both package types
 --tile-size 256                  standard 96 dpi tiles
 --format jpeg|mixed              smaller packages (mixed = JPEG where opaque, PNG at chart edges)
---workers 3                      browser pages rendering in parallel
+--workers 3                      browser processes in parallel (default: auto from CPU count)
+--block 4                        smaller render blocks (default 8; uses less memory)
 --safety-depth 8 --safety-contour 10 --shallow-contour 2 --deep-contour 30
 --detach                         keep running in the background; progress in OUT\s57totpk.log
 ```
@@ -77,6 +78,15 @@ map in your browser, so you can check the symbology before a long render.
    device with Canvas 2D. Blocks of 4×4 tiles are rendered with a 128 px
    margin, which is cropped off. Tiles are 512 px at pixelRatio 2 (or 256 px).
    Fully transparent tiles, outside the chart, are skipped.
+
+   Speed: each block is rendered once and then cut and PNG-encoded in Web
+   Workers inside the page. Parallel work runs in separate browser processes,
+   because pages of one browser share a single GPU process. 8×8 blocks keep
+   79% of the drawn pixels, against 64% for 4×4. On a 4-core machine with
+   software GL this measured 49 ms per 512 px tile, against 72 ms for 4×4
+   blocks with one browser. The log shows the WebGL renderer in use; if it
+   says SwiftShader, Edge is drawing on the CPU. Resuming needs the same
+   `--block` value, because the block grid depends on it.
 5. **Package** (`package.py`).
    * `.tpkx`: Esri *tile-package-spec* 1.0. An uncompressed zip with
      `root.json`, `iteminfo.json`, `thumbnail.png` and

@@ -45,7 +45,7 @@ def main():
         "minzoom": tk.IntVar(value=9), "maxzoom": tk.IntVar(value=16),
         "detail_bbox": tk.StringVar(), "detail_maxzoom": tk.StringVar(),
         "tile_size": tk.StringVar(value="512"), "format": tk.StringVar(value="png"),
-        "workers": tk.IntVar(value=2), "safety_depth": tk.DoubleVar(value=10.0),
+        "workers": tk.IntVar(value=0), "safety_depth": tk.DoubleVar(value=10.0),
         "shallow": tk.DoubleVar(value=2.0), "safety": tk.DoubleVar(value=10.0), "deep": tk.DoubleVar(value=30.0),
         "day": tk.BooleanVar(value=True), "dusk": tk.BooleanVar(), "night": tk.BooleanVar(),
         "tpkx": tk.BooleanVar(value=True), "tpk": tk.BooleanVar(), "recomposite": tk.BooleanVar(),
@@ -78,8 +78,8 @@ def main():
     ttk.Combobox(z, values=("512", "256"), width=5, textvariable=v["tile_size"], state="readonly").pack(side="left")
     ttk.Label(z, text="   image").pack(side="left")
     ttk.Combobox(z, values=("png", "jpeg", "mixed"), width=6, textvariable=v["format"], state="readonly").pack(side="left")
-    ttk.Label(z, text="   parallel pages").pack(side="left")
-    ttk.Spinbox(z, from_=1, to=8, width=3, textvariable=v["workers"]).pack(side="left")
+    ttk.Label(z, text="   browsers (0=auto)").pack(side="left")
+    ttk.Spinbox(z, from_=0, to=8, width=3, textvariable=v["workers"]).pack(side="left")
     row("Zoom levels", z)
 
     d = ttk.Frame(frm)

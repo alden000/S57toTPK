@@ -2,7 +2,10 @@
 
 Blocks of BLOCK x BLOCK tiles are rendered in one view with a MARGIN of
 extra map around them; the margin is cropped so labels at block edges stay
-whole. Tiles are staged in an MBTiles file with resume support.
+whole. The page cuts and PNG-encodes the tiles in Web Workers. Parallelism is
+across separate browser processes (each has its own GPU/SwiftShader process;
+pages of one browser would share one). Tiles are staged in an MBTiles file
+with resume support.
 """
 from __future__ import annotations
 
@@ -29,9 +32,9 @@ class RenderOptions:
     detail_maxzoom: int | None = None       # zooms maxzoom+1..detail_maxzoom only inside detail_bbox
     tile_size: int = 512                    # 256 (96 dpi) or 512 (high-DPI, 192 dpi)
     scheme: str = "day"
-    block: int = 4
+    block: int = 8                          # tiles per block side (8: 79% of drawn pixels kept, 4: 64%)
     margin: int = 128                       # CSS px around each block
-    workers: int = 2                        # browser pages rendering in parallel
+    workers: int = 0                        # browser processes in parallel; 0 = auto
     staging_format: str = "png"             # png | webp (lossless)
     browser_path: str | None = None
     browser_channel: str | None = None
@@ -93,31 +96,33 @@ def plan_blocks(coverage, opts: RenderOptions) -> list[tuple[int, int, int]]:
     return out
 
 
-def _split_block(png: bytes, opts: RenderOptions, z: int, bx: int, by: int):
-    from PIL import Image
-    im = Image.open(io.BytesIO(png))
-    im.load()
-    if im.mode != "RGBA":
-        im = im.convert("RGBA")
-    r = opts.ratio
-    m = opts.margin * r
-    ts = opts.tile_size
+GL_INFO_JS = """() => { const gl = map.getCanvas().getContext('webgl2') || map.getCanvas().getContext('webgl');
+  const x = gl && gl.getExtension('WEBGL_debug_renderer_info');
+  return gl ? (x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) : 'none'; }"""
+
+
+def auto_workers() -> int:
+    """Browser processes to run: software GL already uses several threads
+    per browser, so about one browser per two cores (measured best on 4)."""
+    n = os.cpu_count() or 2
+    return max(1, min(8, (n + 1) // 2 + (1 if n >= 4 else 0)))
+
+
+def _collect_block(tiles_js: list, opts: RenderOptions, z: int, bx: int, by: int):
+    """[(x, y, data)] from the page's [{i, j, png}] (base64 PNG)."""
     n = 1 << z
     out = []
-    for j in range(opts.block):
-        for i in range(opts.block):
-            x, y = bx * opts.block + i, by * opts.block + j
-            if x >= n or y >= n:
-                continue
-            t = im.crop((m + i * ts, m + j * ts, m + (i + 1) * ts, m + (j + 1) * ts))
-            if t.getchannel("A").getextrema()[1] == 0:
-                continue  # fully transparent: outside the chart
+    for t in tiles_js:
+        x, y = bx * opts.block + t["i"], by * opts.block + t["j"]
+        if x >= n or y >= n:
+            continue
+        data = base64.b64decode(t["png"])
+        if opts.staging_format == "webp":
+            from PIL import Image
             buf = io.BytesIO()
-            if opts.staging_format == "webp":
-                t.save(buf, "WEBP", lossless=True, quality=80, method=4)
-            else:
-                t.save(buf, "PNG", compress_level=6)
-            out.append((x, y, buf.getvalue()))
+            Image.open(io.BytesIO(data)).save(buf, "WEBP", lossless=True, quality=80, method=4)
+            data = buf.getvalue()
+        out.append((x, y, data))
     return out
 
 
@@ -146,6 +151,7 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
     blocks = plan_blocks(coverage, opts)
     fp = {"composite": meta.get("created"), "params": meta.get("params"),
           **{k: v for k, v in asdict(opts).items() if k not in ("workers", "browser_path", "browser_channel", "extra")}}
+    # block size changes the block grid; resume still works per block
     st = StagingMBTiles(out_path, fp, log=log)
     if st.complete:
         log(f"  {os.path.basename(out_path)} already complete")
@@ -165,7 +171,10 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
 
     cfg = page_config(meta, opts)
     view = opts.block * 256 + 2 * opts.margin
-    pool = ThreadPoolExecutor(max_workers=max(2, opts.workers))
+    if view * opts.ratio > 8192:
+        raise ValueError(f"block {opts.block} x tile size {opts.tile_size} needs a canvas over 8192 px")
+    nworkers = opts.workers or auto_workers()
+    pool = ThreadPoolExecutor(max_workers=2)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     for b in todo:
@@ -176,11 +185,16 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
 
     with RenderServer(tiles=tiles, config=cfg) as srv:
         async with async_playwright() as pw:
-            browser = await launch(pw, opts.browser_path, opts.browser_channel, log=log)
-            ctx = await browser.new_context(viewport={"width": view, "height": view},
-                                            device_scale_factor=opts.ratio)
+            browsers: dict[int, object] = {}
+            gl_logged: list = []
+            log(f"  {nworkers} browser process(es), {opts.block}x{opts.block}-tile blocks")
 
-            async def new_page():
+            async def new_page(slot):
+                if slot not in browsers:
+                    browsers[slot] = await launch(pw, opts.browser_path, opts.browser_channel,
+                                                  log=log if slot == 0 else (lambda *_: None))
+                ctx = await browsers[slot].new_context(viewport={"width": view, "height": view},
+                                                       device_scale_factor=opts.ratio)
                 page = await ctx.new_page()
                 page.on("console", lambda m: m.type == "error" and log(f"  [page] {m.text}"))
                 await page.goto(srv.url + "/index.html")
@@ -188,10 +202,14 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                 err = await page.evaluate("window.lastError || null")
                 if err:
                     raise RuntimeError(f"render page failed: {err}")
+                if slot == 0 and not gl_logged:
+                    gl_logged.append(1)
+                    gl = await page.evaluate(GL_INFO_JS)
+                    log(f"  WebGL renderer: {gl}" + ("  (software rendering)" if "SwiftShader" in str(gl) else ""))
                 return page
 
             async def worker(wid):
-                page = await new_page()
+                page = await new_page(wid)
                 while not queue.empty():
                     if stop_event is not None and stop_event.is_set():
                         return
@@ -201,19 +219,19 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                     lon, lat = tile_to_lonlat(cx, cy, z)
                     for attempt in range(3):
                         try:
-                            url = await page.evaluate("([a,b,c]) => window.renderView(a,b,c)", [lon, lat, z - 1])
+                            tiles_js = await page.evaluate("([a,b,c,d,e]) => window.renderBlock(a,b,c,d,e)",
+                                                           [lon, lat, z - 1, opts.block, opts.margin])
                             break
                         except Exception as e:  # noqa: BLE001 - page crash / timeout: reload
                             log(f"  block z{z} {bx},{by}: {str(e).splitlines()[0]} (retry {attempt + 1})")
                             try:
-                                await page.close()
+                                await page.context.close()
                             except Exception:  # noqa: BLE001
                                 pass
-                            page = await new_page()
+                            page = await new_page(wid)
                     else:
                         raise RuntimeError(f"block z{z} {bx},{by} failed 3 times")
-                    png = base64.b64decode(url.split(",", 1)[1])
-                    res = await loop.run_in_executor(pool, _split_block, png, opts, z, bx, by)
+                    res = await loop.run_in_executor(pool, _collect_block, tiles_js, opts, z, bx, by)
                     st.write_block(z, bx, by, res)
                     stats["blocks"] += 1
                     stats["tiles"] += len(res)
@@ -225,9 +243,10 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                             f"{el / 60:.1f} min, ETA {eta / 60:.1f} min")
 
             try:
-                await asyncio.gather(*(worker(i) for i in range(max(1, opts.workers))))
+                await asyncio.gather(*(worker(i) for i in range(nworkers)))
             finally:
-                await browser.close()
+                for b in browsers.values():
+                    await b.close()
     pool.shutdown()
     if stop_event is not None and stop_event.is_set():
         st.close()

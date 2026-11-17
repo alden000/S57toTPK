@@ -64,7 +64,8 @@ def _add_render(p):
     g.add_argument("--schemes", default="day", help="comma list of day,dusk,night")
     g.add_argument("--tile-size", type=int, choices=(256, 512), default=512,
                    help="512 = high-DPI tiles (192 dpi), 256 = standard 96 dpi")
-    g.add_argument("--workers", type=int, default=2, help="browser pages rendering in parallel")
+    g.add_argument("--workers", type=int, default=0, help="browser processes rendering in parallel (0 = auto from CPU count)")
+    g.add_argument("--block", type=int, default=8, help="tiles per render block side (8, or 4 for low-memory machines)")
     g.add_argument("--staging", choices=("png", "webp"), default="png", help="staging tile format (lossless)")
     g.add_argument("--tiler", choices=("builtin", "tippecanoe"), default="builtin",
                    help="vector tiles: built-in (no extra software) or tippecanoe in Docker")
@@ -169,7 +170,7 @@ def do_render(a, log):
         for scheme in _schemes(a.schemes):
             opts = RenderOptions(minzoom=a.minzoom, maxzoom=a.maxzoom, detail_bbox=a.detail_bbox,
                                  detail_maxzoom=a.detail_maxzoom, tile_size=a.tile_size, scheme=scheme,
-                                 workers=a.workers, staging_format=a.staging, browser_path=a.browser,
+                                 workers=a.workers, block=a.block, staging_format=a.staging, browser_path=a.browser,
                                  browser_channel=a.channel, vmaxzoom=tiles.maxzoom)
             paths.append(render(os.path.join(a.out, f"tiles-{scheme}.mbtiles"), meta, tiles, opts, log=log))
     finally:
