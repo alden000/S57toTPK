@@ -9,3 +9,5 @@ dist/
 *.tpkx
 
 .venv-build/
+
+docs/user-guide/guide_final.html

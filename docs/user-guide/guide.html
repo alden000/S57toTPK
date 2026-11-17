@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ENC Chart Converter – User Guide</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 18mm 16mm; }
+  :root { --blue: #0b4f8a; --light: #eaf2fa; --warn: #fff4e0; --warnline: #e0a030; --ok: #e9f6ec; --okline: #3a9a55; --grey: #555; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Liberation Sans", Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; color: #1d1d1d; margin: 0; }
+  h1 { font-size: 24pt; color: var(--blue); margin: 0 0 4px; }
+  h2 { font-size: 15pt; color: var(--blue); border-bottom: 2px solid var(--blue); padding-bottom: 3px; margin: 22px 0 10px; break-after: avoid; }
+  h3 { font-size: 12pt; margin: 14px 0 6px; break-after: avoid; }
+  p { margin: 6px 0; }
+  .subtitle { font-size: 12pt; color: var(--grey); margin-bottom: 14px; }
+  .cover { border-left: 6px solid var(--blue); padding: 6px 0 6px 14px; margin-bottom: 16px; }
+  .box { border-radius: 6px; padding: 10px 14px; margin: 10px 0; break-inside: avoid; }
+  .info { background: var(--light); border-left: 5px solid var(--blue); }
+  .warn { background: var(--warn); border-left: 5px solid var(--warnline); }
+  .ok { background: var(--ok); border-left: 5px solid var(--okline); }
+  .box b.t { display: block; margin-bottom: 3px; }
+  ol.steps { counter-reset: s; list-style: none; padding-left: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 4px 0 8px 42px; break-inside: avoid; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--blue); color: #fff; font-weight: 700; text-align: center; line-height: 28px; }
+  ul { margin: 4px 0 6px 0; padding-left: 20px; }
+  li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; break-inside: avoid; font-size: 10pt; }
+  th, td { border: 1px solid #c8d3df; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--light); }
+  .btn { display: inline-block; border: 1px solid #888; border-radius: 3px; background: #f1f1f1; padding: 0 6px; font-size: 9.5pt; white-space: nowrap; }
+  .key { font-family: Consolas, "Liberation Mono", monospace; background: #f1f1f1; padding: 0 4px; border-radius: 3px; }
+  figure { margin: 10px 0; text-align: center; break-inside: avoid; }
+  figure img { max-width: 100%; border: 1px solid #bbb; border-radius: 4px; }
+  figcaption { font-size: 9pt; color: var(--grey); margin-top: 3px; }
+  .toc { columns: 2; font-size: 10pt; margin: 6px 0 0; }
+  .toc li { break-inside: avoid; }
+  .page { break-before: page; }
+  .small { font-size: 9pt; color: var(--grey); }
+  .two { display: flex; gap: 14px; }
+  .two > div { flex: 1; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>ENC Chart Converter</h1>
+  <div class="subtitle">Turn S-57 electronic navigational charts into ArcGIS tile packages, with no installation and no command line.</div>
+</div>
+
+<div class="box info">
+  <b class="t">In one sentence</b>
+  You point the program at a folder of S-57 ENC charts, choose how much detail you want, press <span class="btn">Start</span>,
+  and get a <b>.tpkx</b> (or <b>.tpk</b>) file. That file shows the charts in ArcGIS Pro, ArcGIS Field Maps and ArcGIS Online,
+  in nautical-chart style, and works <b>offline</b>.
+</div>
+
+<figure><img src="img/chart_sample.png" style="width: 88%"><figcaption>Example of the result: an ENC drawn in nautical-chart style (Narragansett Bay, USA).</figcaption></figure>
+
+<h3>Contents</h3>
+<ol class="toc">
+  <li>What you need</li>
+  <li>Starting the program (first time)</li>
+  <li>Making a tile package, step by step</li>
+  <li>Choosing the amount of detail</li>
+  <li>Extra detail for a harbour</li>
+  <li>Using the result in ArcGIS</li>
+  <li>Stopping and continuing</li>
+  <li>Advanced settings</li>
+  <li>The files in the output folder</li>
+  <li>Troubleshooting</li>
+  <li>Good to know</li>
+</ol>
+
+<h2>1. What you need</h2>
+<table>
+  <tr><th style="width:32%">Item</th><th>Details</th></tr>
+  <tr><td><b>A Windows PC</b></td><td>Windows 10 or Windows 11, 64-bit. A normal office PC or laptop is fine; more processor cores make it faster.</td></tr>
+  <tr><td><b>Microsoft Edge</b></td><td><b>Already part of Windows 10 and 11, so there is nothing to install.</b> The program uses it, hidden in the background, to draw the charts. Google Chrome also works.</td></tr>
+  <tr><td><b>Your ENC charts</b></td><td>An S-57 <i>exchange set</i>: the <span class="key">ENC_ROOT</span> folder, with one sub-folder per chart holding <span class="key">.000</span> files and optional updates (<span class="key">.001</span>, <span class="key">.002</span> …). The charts must be <b>unencrypted</b> S-57. Encrypted S-63 charts cannot be used.</td></tr>
+  <tr><td><b>Free disk space</b></td><td>Plan on <b>2–3 GB</b> for a regional set at the <i>Standard</i> detail level (see the example in section 3), and about four times that for <i>Maximum</i>. Once you have the finished package, you can delete the rest (section 9).</td></tr>
+</table>
+<div class="box ok"><b class="t">Nothing to install</b>
+The program is a single file, <span class="key">S57toTPK.exe</span>. It does not install itself, needs no administrator rights, and can run from a USB stick.
+To remove it, delete the file.</div>
+
+<h2>2. Starting the program (first time)</h2>
+<ol class="steps">
+  <li><b>Unzip the download.</b> Right-click the ZIP file → <span class="btn">Extract All…</span> → <span class="btn">Extract</span>.
+      <br><span class="small">Do not run the program from inside the ZIP window: extract it first.</span></li>
+  <li><b>Double-click <span class="key">S57toTPK.exe</span></b> in the extracted folder.</li>
+  <li><b>If Windows shows a blue "Windows protected your PC" message:</b> click <span class="btn">More info</span>, then <span class="btn">Run anyway</span>.
+      <br><span class="small">Windows shows this for any new program it hasn't seen many times before, not because something is wrong. You only need to do this once.</span></li>
+  <li><b>Wait about 10–20 seconds.</b> The program unpacks itself each time it starts, so the window takes a moment to appear. Nothing is wrong if nothing seems to happen at first.</li>
+</ol>
+
+<div class="page"></div>
+<h2>3. Making a tile package, step by step</h2>
+<figure><img src="img/win_main.png" style="width: 80%"><figcaption>The program window. Your window may look slightly different (Windows style buttons).</figcaption></figure>
+
+<ol class="steps">
+  <li><b>Charts folder:</b> click <span class="btn">Browse…</span> next to <i>Charts folder (ENC_ROOT)</i> and choose the folder that holds your charts.
+      Underneath, the program confirms what it found, for example <i>"Found 43 chart(s), scales 1:12,000 to 1:350,000"</i>.
+      <br><span class="small">If it says no charts were found, you probably picked a folder one level too high or too low: pick the one called <span class="key">ENC_ROOT</span>.</span></li>
+  <li><b>Where to save:</b> a folder is suggested automatically next to your charts. Click <span class="btn">Browse…</span> to choose another. Type a <b>Package name</b>; it becomes the file name, for example <i>Rhode Island.tpkx</i>.</li>
+  <li><b>How much detail:</b> keep <b>Standard (recommended)</b> unless you have a reason to change it (see section 4).</li>
+  <li><b>Extra detail</b> (optional): for one harbour or marina you can add closer zoom levels. See section 5.</li>
+  <li><b>Colours:</b> <i>Day</i> is the normal chart look. Tick <i>Dusk</i> and/or <i>Night</i> as well if you want darker versions; each colour scheme becomes its own file.</li>
+  <li><b>Package type:</b> keep <b>.tpkx</b> ticked; it suits current ArcGIS (Pro 2.3 and newer, Field Maps, ArcGIS Online).
+      Tick <b>.tpk</b> only for older ArcGIS apps.</li>
+  <li><b>Optional check:</b> click <span class="btn">Preview chart</span> to see the chart in your web browser before the long conversion.</li>
+  <li><b>Click <span class="btn">Start</span>.</b> A progress bar shows what is happening and roughly how long is left.</li>
+</ol>
+
+<figure><img src="img/win_running.png" style="width: 62%"><figcaption>While it works: the status line, progress bar and time remaining. <span class="btn">Stop</span> pauses safely.</figcaption></figure>
+
+<ol class="steps" start="9" style="counter-reset: s 8">
+  <li><b>When it is finished</b> a message lists the file(s) created and offers to open the folder. That's it: your package is ready (see section 6).</li>
+</ol>
+
+<div class="box info"><b class="t">How long does it take?</b>
+It depends on the size of the area, the detail level and the PC. The first part (reading the charts) takes seconds to a minute.
+Drawing the tiles takes most of the time. The window shows an estimate as soon as it starts drawing.
+<br><b>Example:</b> {{EXAMPLE}}
+<br>Overview finishes in minutes. Maximum for a large region can take many hours, so let it run overnight.</div>
+
+<div class="page"></div>
+<h2>4. Choosing the amount of detail</h2>
+<p>Digital maps are stored as <i>zoom levels</i>. Each level shows twice as much detail as the one before, and needs about
+<b>four times as many tiles</b>. So the deepest level decides most of the time and file size.</p>
+<table>
+  <tr><th>Choice in the window</th><th>Zoom levels</th><th>Closest chart scale</th><th>Good for</th><th>Time and size</th></tr>
+  <tr><td><b>Overview</b></td><td>8 – 13</td><td>about 1:72,000</td><td>Coastal overview, passage planning</td><td>Small, quick</td></tr>
+  <tr><td><b>Standard</b> (recommended)</td><td>9 – 16</td><td>about 1:9,000</td><td>Navigation, harbour approaches, most uses</td><td>Medium</td></tr>
+  <tr><td><b>Maximum</b></td><td>9 – 17</td><td>about 1:4,500</td><td>Close-up detail everywhere</td><td>About 4 × Standard</td></tr>
+  <tr><td><b>Custom</b></td><td>you choose</td><td>shown in the window</td><td>Special cases</td><td>Depends</td></tr>
+</table>
+<div class="box ok"><b class="t">Tip</b>
+Rather than <i>Maximum</i> everywhere, use <b>Standard</b> plus <b>extra detail for just the harbour you need</b> (next section).
+You get the close-up where it matters for a fraction of the time and disk space.</div>
+
+<h2>5. Extra detail for a harbour</h2>
+<ol class="steps">
+  <li>Tick <b>Add extra detail in one area</b>. Leave <i>down to zoom</i> at <b>18</b> (about 1:2,300); use 17 for a smaller result, or 19 for even more detail.</li>
+  <li>Click <span class="btn">Choose area on map…</span>. After a short preparation, your web browser opens and shows the chart.</li>
+  <li>In the browser, click <span class="btn">Draw area</span>, then <b>press and drag</b> on the map to draw a box around the harbour.
+      The size of the box is shown (for example <i>about 12.5 km × 7.8 km</i>).
+      <br><span class="small">Mouse wheel = zoom, drag = move the map. To change the area later, draw a new box.</span></li>
+  <li>Click <span class="btn">Use this area</span>. The program window confirms <i>"Area chosen"</i>. You can close the browser tab.</li>
+</ol>
+<figure><img src="img/map_select.png" style="width: 42%"><figcaption>Choosing the extra-detail area: drag a box on the chart, then click <i>Use this area</i>.</figcaption></figure>
+
+<h2>6. Using the result in ArcGIS</h2>
+<p>The finished file is in your output folder, named after your package, for example <span class="key">Rhode Island.tpkx</span>.
+If you chose Dusk or Night, those files end in <span class="key">-dusk</span> / <span class="key">-night</span>.</p>
+<table>
+  <tr><th style="width:26%">Where</th><th>How</th></tr>
+  <tr><td><b>ArcGIS Pro</b></td><td>On the <i>Map</i> tab click <span class="btn">Add Data</span>, browse to the <span class="key">.tpkx</span> file, and click <span class="btn">OK</span>.
+      The charts appear as a layer you can show with other data.</td></tr>
+  <tr><td><b>ArcGIS Online / Portal</b></td><td><i>Content</i> → <span class="btn">New item</span> → choose the <span class="key">.tpkx</span> file, and let it create a <b>tile layer</b>.
+      You can then use it in web maps and in Field Maps, including offline areas.</td></tr>
+  <tr><td><b>ArcGIS Field Maps</b> (offline)</td><td>Use the file as the basemap of an offline map area via ArcGIS Online (row above), or copy it directly to the device if
+      your organisation sideloads basemaps.</td></tr>
+  <tr><td><b>Other ArcGIS apps</b></td><td>Apps built with ArcGIS Maps SDKs (Runtime 100.5 or newer) open <span class="key">.tpkx</span> as a tiled layer.
+      Older apps: use the <span class="key">.tpk</span> type instead.</td></tr>
+</table>
+<div class="box info"><b class="t">The package is a picture of the chart</b>
+The charts are stored as images (tiles). They display fast and work offline, but you cannot click a buoy to read its attributes or
+change the symbols in ArcGIS. To change the look (for example the safety depth), convert again with different settings.</div>
+
+<div style="break-inside: avoid">
+<h2>7. Stopping and continuing</h2>
+<ul>
+  <li>Press <span class="btn">Stop</span>, or close the window, at any time. Finished work is kept.</li>
+  <li>Later, open the program (it remembers your settings) and press <span class="btn">Start</span> again: it <b>continues where it stopped</b>.</li>
+  <li>This also covers a PC restart, sleep or power cut during a long conversion.</li>
+  <li>If you change the detail level, area or tile settings, it starts the drawing again from the beginning for those settings.</li>
+  <li>Do not put the PC to sleep while it works: set Windows to stay awake for long runs (<i>Settings → System → Power</i>).</li>
+</ul>
+</div>
+
+<h2>8. Advanced settings</h2>
+<p>Click <span class="btn">Show advanced settings</span>. You normally don't need to change these.</p>
+<table>
+  <tr><th style="width:26%">Setting</th><th>What it does</th></tr>
+  <tr><td><b>Tile sharpness</b></td><td><i>High-DPI</i> (default) looks crisp on modern laptop, tablet and phone screens. <i>Standard</i> makes files about 4 times smaller, but text looks softer on sharp screens.</td></tr>
+  <tr><td><b>Image format</b></td><td><i>PNG</i> (default) gives the best quality and crisp text. <i>JPEG</i> is the smallest, with slightly blurred text. <i>Mixed</i> uses JPEG inside the chart and PNG at the edges so the edges stay transparent.</td></tr>
+  <tr><td><b>Depths (metres)</b></td><td>The depths used for the chart colours, the same idea as on an ECDIS:
+      <ul><li><b>Safety contour</b> (default 10 m): depth line drawn bold; water shallower than this is shown in darker blue.</li>
+          <li><b>Safety depth</b> (default 10 m): soundings at or shallower than this are shown in black, deeper ones in grey. Isolated dangers in deep water get a magenta danger symbol.</li>
+          <li><b>Shallow</b> (2 m) and <b>Deep</b> (30 m) contours: the other depth-shade boundaries.</li></ul>
+      Set these for your vessel's draft. Changing them re-reads the charts and redraws.</td></tr>
+  <tr><td><b>Browser used to draw</b></td><td><i>Automatic</i> uses Microsoft Edge, or Chrome if Edge is missing. You can pick Edge or Chrome explicitly, or choose <i>Other…</i> and select any other Chromium-based browser program (Brave, Vivaldi, Opera). Firefox cannot be used for drawing.</td></tr>
+  <tr><td><b>Parallel browsers</b></td><td>How many hidden browsers draw at the same time. <i>Automatic</i> picks a value for your PC. Choose <i>1</i> or <i>2</i> if the PC becomes slow for other work or runs short of memory.</td></tr>
+</table>
+
+<h2>9. The files in the output folder</h2>
+<table>
+  <tr><th style="width:34%">File / folder</th><th>What it is</th><th style="width:20%">Keep?</th></tr>
+  <tr><td><span class="key">YourName.tpkx</span> / <span class="key">.tpk</span></td><td><b>The result</b>: the tile package for ArcGIS.</td><td><b>Yes</b></td></tr>
+  <tr><td><span class="key">tiles-day.mbtiles</span> (and dusk/night)</td><td>The drawn tiles before packaging. Lets you make the package again (e.g. as .tpk too) without redrawing.</td><td>Optional</td></tr>
+  <tr><td><span class="key">enc.geojsons</span>, <span class="key">enc_meta.json</span>, <span class="key">vector-cache.mbtiles</span>, <span class="key">cells</span> folder</td><td>Working data prepared from your charts.</td><td>Delete when done</td></tr>
+  <tr><td><span class="key">s57totpk.log</span></td><td>A record of what happened. Useful if you need help.</td><td>Optional</td></tr>
+</table>
+<p class="small">Once you have your package, you can delete everything else in the output folder to free disk space.
+Keep it if you plan to make the Dusk/Night versions or the other package type later: that saves time.</p>
+
+<h2>10. Troubleshooting</h2>
+<table>
+  <tr><th style="width:34%">What you see</th><th>What to do</th></tr>
+  <tr><td>"Windows protected your PC"</td><td>Click <span class="btn">More info</span> → <span class="btn">Run anyway</span> (section 2).</td></tr>
+  <tr><td>The program disappears or antivirus reports it</td><td>Some antivirus products distrust new, unsigned programs. Ask your IT department to allow <span class="key">S57toTPK.exe</span>, or restore it from quarantine.</td></tr>
+  <tr><td>"No S-57 chart files (.000) were found"</td><td>Choose the <span class="key">ENC_ROOT</span> folder: the one holding one sub-folder per chart.</td></tr>
+  <tr><td>"No usable browser was found"</td><td>Microsoft Edge is missing or blocked. Install or repair Edge or Google Chrome, or pick a browser under <i>Advanced settings → Browser used to draw</i>.</td></tr>
+  <tr><td>Charts fail to read, or the result is empty</td><td>The charts may be <b>encrypted (S-63)</b>. Only unencrypted S-57 charts can be converted.</td></tr>
+  <tr><td>"The disk is full"</td><td>Free space, or choose an output folder on a bigger drive, then press <span class="btn">Start</span> to continue.</td></tr>
+  <tr><td>"Ran out of memory" or the PC becomes very slow</td><td>Under <i>Advanced settings</i> set <i>Parallel browsers</i> to 1 or 2, then <span class="btn">Start</span> again.</td></tr>
+  <tr><td>It is very slow</td><td>Use <i>Standard</i> plus a harbour area instead of <i>Maximum</i>. Close other heavy programs. The log line <i>"WebGL renderer"</i> under <span class="btn">Show details</span> tells whether the graphics card is used; on PCs without a usable graphics card drawing is slower.</td></tr>
+  <tr><td>ArcGIS will not open the <span class="key">.tpk</span></td><td>Use the <span class="key">.tpkx</span> file if your ArcGIS is recent. Otherwise report the error message (see below).</td></tr>
+  <tr><td>Something else went wrong</td><td>Click <span class="btn">Show details</span> and copy the last lines, or send the file <span class="key">s57totpk.log</span> from the output folder to whoever supports you.</td></tr>
+</table>
+
+<h2>11. Good to know</h2>
+<ul>
+  <li><b>Chart updates</b> (<span class="key">.001</span>, <span class="key">.002</span> … files) are applied automatically. When a chart appears more than once, the newest edition is used. Cancelled charts are left out.</li>
+  <li><b>Overlapping charts</b> are combined the way a chart plotter does: wherever a larger-scale (more detailed) chart exists, it is used.</li>
+  <li><b>New chart updates?</b> Put them in the same <span class="key">ENC_ROOT</span> and press <span class="btn">Start</span> again: the program notices the change and rebuilds.</li>
+  <li>The symbols follow the international S-52 chart style closely, but this is <b>not a certified ECDIS display</b>. Use the result as a reference and situational map. It does not replace official navigation equipment.</li>
+  <li><b>For IT staff:</b> the program also has a command line. Run <span class="key">S57toTPK.exe --help</span> from a Command Prompt.</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,74 @@
+==============================================================
+  ENC CHART CONVERTER  -  READ ME FIRST
+  S-57 electronic charts  -->  ArcGIS tile package (.tpkx/.tpk)
+==============================================================
+
+The full illustrated guide is in:
+    User Guide.pdf   (double-click; it opens in Microsoft Edge)
+
+--------------------------------------------------------------
+QUICK START
+--------------------------------------------------------------
+
+ 1. Extract this ZIP first:
+    right-click the ZIP  ->  Extract All...  ->  Extract.
+    (Do not run the program from inside the ZIP window.)
+
+ 2. Double-click  S57toTPK.exe
+    - If Windows says "Windows protected your PC":
+      click "More info", then "Run anyway". (Only the first time.)
+    - The window takes 10-20 seconds to appear.
+
+ 3. In the window:
+    a) Charts folder: Browse... to your ENC_ROOT folder
+       (the folder that holds one sub-folder per chart).
+    b) Where to save: pick a folder and type a package name.
+    c) How much detail: keep "Standard (recommended)".
+    d) Optional: tick "Add extra detail in one area", click
+       "Choose area on map..." and drag a box around a harbour
+       on the map that opens in your browser, then click
+       "Use this area".
+    e) Click  Start.  A progress bar shows the time left.
+
+ 4. When it finishes, the window lists the file(s) it made.
+    In ArcGIS Pro: Map tab -> Add Data -> choose the .tpkx file.
+
+You can press Stop (or close the window) at any time.
+Press Start again later and it continues where it stopped.
+
+--------------------------------------------------------------
+WHAT YOU NEED
+--------------------------------------------------------------
+
+ - Windows 10 or 11 (64-bit).
+ - Microsoft Edge. It comes with Windows: nothing to install.
+ - Unencrypted S-57 ENC charts (.000 files + updates).
+   Encrypted S-63 charts cannot be used.
+ - Free disk space: 2-3 GB for a regional set (Standard detail).
+
+The program needs no installation and no administrator rights,
+and can run from a USB stick. To remove it, delete the file.
+
+--------------------------------------------------------------
+IN THIS ZIP
+--------------------------------------------------------------
+
+ S57toTPK.exe                 the program
+ User Guide.pdf               illustrated instructions
+ READ ME FIRST.txt            this file
+ Sample packages\             ready-made example (one NOAA chart:
+                              Point Judith, Rhode Island, USA,
+                              zoom 10-16) to try in ArcGIS straight
+                              away: .tpkx = current ArcGIS,
+                              .tpk = older ArcGIS apps
+
+--------------------------------------------------------------
+HELP
+--------------------------------------------------------------
+
+If something goes wrong, see "Troubleshooting" in the guide.
+To ask for help, send the file s57totpk.log from your output folder.
+
+Note: the chart style follows the S-52 standard closely, but this
+is not a certified ECDIS display. Use it as a reference map, not
+as a replacement for official navigation equipment.
