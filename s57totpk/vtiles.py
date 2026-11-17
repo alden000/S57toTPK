@@ -218,7 +218,9 @@ class VectorTiler:
         self.geoms = geoms
         tid = shapely.get_type_id(geoms)
         self.kind = np.where(np.isin(tid, (0, 4)), 1, np.where(np.isin(tid, (1, 5)), 2, 3))
-        self.minz = np.array([max(0, int(p.get("_mz", 0)) - 1) for p in self.props], dtype=np.int16)
+        # vector zoom at which a feature first appears; capped at maxzoom so
+        # the deepest tiles carry everything (the style hides it until _mz)
+        self.minz = np.array([min(maxzoom, max(0, int(p.get("_mz", 0)) - 1)) for p in self.props], dtype=np.int16)
         self.skin = np.array([p.get("OBJL") in SKIN_OF_EARTH and k == 3
                               for p, k in zip(self.props, self.kind)], dtype=bool)
         # drop bookkeeping keys the style does not need
@@ -237,7 +239,7 @@ class VectorTiler:
     # -- cache ---------------------------------------------------------
     def _open_cache(self, path: str, src: str):
         st = os.stat(src)
-        fp = f"{os.path.abspath(src)}|{st.st_size}|{int(st.st_mtime)}|{self.maxzoom}|{self.simplification}|v1"
+        fp = f"{os.path.abspath(src)}|{st.st_size}|{int(st.st_mtime)}|{self.maxzoom}|{self.simplification}|v2"
         db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("CREATE TABLE IF NOT EXISTS metadata (name TEXT PRIMARY KEY, value TEXT)")
