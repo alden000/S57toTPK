@@ -22,14 +22,30 @@ jobs:
       - name: Build exe
         shell: cmd
         run: pyinstaller --noconfirm build_exe\s57totpk.spec
-      - name: Smoke test with Edge on a NOAA cell
+      - name: Get a NOAA test cell
         shell: cmd
         run: |
           curl -sSfL -o cell.zip https://www.charts.noaa.gov/ENCs/US5RI1BE.zip || exit /b 1
           tar -xf cell.zip || exit /b 1
+      - name: Diagnostic render (4x4 blocks, 1 browser)
+        continue-on-error: true
+        shell: cmd
+        run: dist\s57totpk.exe run --enc ENC_ROOT --out smoke-small --minzoom 12 --maxzoom 13 --block 4 --workers 1 --package tpkx
+      - name: Smoke test with Edge (default settings)
+        shell: cmd
+        run: |
           dist\s57totpk.exe run --enc ENC_ROOT --out smoke --minzoom 12 --maxzoom 13 --package tpkx,tpk || exit /b 1
           dist\s57totpk.exe inspect smoke\ENC.tpkx || exit /b 1
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: |
+            smoke-small/*.log
+            smoke/*.log
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: s57totpk-windows
           path: |

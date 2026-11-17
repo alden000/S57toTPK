@@ -35,7 +35,14 @@
     if (img) map.addImage(e.id, img, {pixelRatio: ratio});
     else map.addImage(e.id, {width: 1, height: 1, data: new Uint8Array(4)});
   });
-  map.on('error', e => { window.lastError = String(e && e.error && e.error.message || e); });
+  // Tile/source load errors are retried by MapLibre and must not abort the
+  // render; only style-level errors are fatal.
+  window.softErrors = [];
+  map.on('error', e => {
+    const msg = String(e && e.error && e.error.message || e);
+    if (e && (e.sourceId || e.tile)) { window.softErrors.push(msg); console.warn('tile error: ' + msg); }
+    else window.lastError = msg;
+  });
 
   if (preview) {
     map.addControl(new maplibregl.NavigationControl());

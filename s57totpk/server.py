@@ -103,12 +103,22 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, fh.read(), ctype, {"Accept-Ranges": "bytes"})
 
 
+class _Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        import sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, TimeoutError)):
+            return  # the browser closed a keep-alive connection: harmless
+        super().handle_error(request, client_address)
+
+
 class RenderServer:
     def __init__(self, tiles=None, glyphs=None, config: dict | None = None,
                  extra_dirs: dict[str, str] | None = None, port: int = 0):
         from .glyphs import GlyphMaker
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
-        self.httpd.daemon_threads = True
+        self.httpd = _Server(("127.0.0.1", port), _Handler)
         self.httpd.tiles = tiles
         self.httpd.glyphs = glyphs or GlyphMaker()
         self.httpd.config = config or {}

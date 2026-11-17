@@ -187,16 +187,24 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
         async with async_playwright() as pw:
             browsers: dict[int, object] = {}
             gl_logged: list = []
+            closing: list = []
             log(f"  {nworkers} browser process(es), {opts.block}x{opts.block}-tile blocks")
 
             async def new_page(slot):
-                if slot not in browsers:
-                    browsers[slot] = await launch(pw, opts.browser_path, opts.browser_channel,
-                                                  log=log if slot == 0 else (lambda *_: None))
-                ctx = await browsers[slot].new_context(viewport={"width": view, "height": view},
-                                                       device_scale_factor=opts.ratio)
+                b = browsers.get(slot)
+                if b is None or not b.is_connected():
+                    if b is not None:
+                        log(f"  browser {slot} was lost; starting a new one")
+                    b = await launch(pw, opts.browser_path, opts.browser_channel,
+                                     log=log if slot == 0 and b is None else (lambda *_: None))
+                    b.on("disconnected", lambda *_: closing or log(f"  browser {slot} disconnected"))
+                    browsers[slot] = b
+                ctx = await b.new_context(viewport={"width": view, "height": view},
+                                          device_scale_factor=opts.ratio)
                 page = await ctx.new_page()
-                page.on("console", lambda m: m.type == "error" and log(f"  [page] {m.text}"))
+                page.on("console", lambda m: m.type in ("error", "warning") and log(f"  [page {slot}] {m.text}"))
+                page.on("crash", lambda *_: log(f"  [page {slot}] renderer crashed (out of memory or GPU failure?)"))
+                page.on("pageerror", lambda e: log(f"  [page {slot}] {e}"))
                 await page.goto(srv.url + "/index.html")
                 await page.wait_for_function("window.ready === true || window.lastError", timeout=120_000)
                 err = await page.evaluate("window.lastError || null")
@@ -245,6 +253,7 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
             try:
                 await asyncio.gather(*(worker(i) for i in range(nworkers)))
             finally:
+                closing.append(1)
                 for b in browsers.values():
                     await b.close()
     pool.shutdown()
