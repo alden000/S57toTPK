@@ -242,7 +242,8 @@ def do_inspect(a, log):
 def _detach(argv, out, log):
     args = [a for a in argv if a != "--detach"]
     exe = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "s57totpk"]
-    logf = open(os.path.join(out, "s57totpk.log"), "ab")
+    # the child writes s57totpk.log itself; its console (tracebacks) goes here
+    logf = open(os.path.join(out, "s57totpk-console.log"), "ab")
     kw = {}
     if sys.platform == "win32":
         kw["creationflags"] = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED | NEW_GROUP | NO_WINDOW

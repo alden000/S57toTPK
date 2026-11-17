@@ -1,0 +1,38 @@
+name: build-exe
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ["s57totpk/**", "build_exe/**", "tests/**", "pyproject.toml", ".github/workflows/build-exe.yml"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        shell: cmd
+        run: python -m pip install -e .[dev]
+      - name: Unit tests
+        shell: cmd
+        run: python -m pytest -q tests
+      - name: Build exe
+        shell: cmd
+        run: pyinstaller --noconfirm build_exe\s57totpk.spec
+      - name: Smoke test with Edge on a NOAA cell
+        shell: cmd
+        run: |
+          curl -sSfL -o cell.zip https://www.charts.noaa.gov/ENCs/US5RI1BE.zip || exit /b 1
+          tar -xf cell.zip || exit /b 1
+          dist\s57totpk.exe run --enc ENC_ROOT --out smoke --minzoom 12 --maxzoom 13 --package tpkx,tpk || exit /b 1
+          dist\s57totpk.exe inspect smoke\ENC.tpkx || exit /b 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s57totpk-windows
+          path: |
+            dist/s57totpk.exe
+            smoke/ENC.tpkx
+            smoke/ENC.tpk

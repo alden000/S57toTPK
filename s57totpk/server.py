@@ -56,6 +56,8 @@ class _Handler(BaseHTTPRequestHandler):
             if m:
                 data = srv.glyphs.range_pbf(m.group(1), int(m.group(2)))
                 return self._send(200, data, "application/x-protobuf")
+            if path == "/favicon.ico":
+                return self._send(204, b"", "image/x-icon")
             if path == "/config.json":
                 return self._send(200, json.dumps(srv.config).encode(), "application/json")
             if path == "/" or path == "":

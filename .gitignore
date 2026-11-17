@@ -7,3 +7,5 @@ dist/
 *.partial
 *.tpk
 *.tpkx
+
+.venv-build/
