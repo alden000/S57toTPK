@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import numpy as np
 import shapely
 
-from . import s52
+from . import progress, s52
 from .cells import Cell, discover, stage
 
 S57_OPTIONS = ("RETURN_PRIMITIVES=OFF,RETURN_LINKAGES=OFF,LNAM_REFS=OFF,"
@@ -333,6 +333,7 @@ def build(enc_root: str, out_dir: str, params: s52.S52Params | None = None,
     safety_by_cell: dict = {}
     cell_info = []
     for n, c in enumerate(cells, 1):
+        progress.report("composite", n - 1, len(cells), cell=c.name)
         feats, cov = read_cell(c.staged, c, log=log)
         eff = shapely.difference(cov, covered, grid_size=GRID) if not covered.is_empty else cov
         covered = shapely.union(covered, cov, grid_size=GRID)
@@ -345,6 +346,7 @@ def build(enc_root: str, out_dir: str, params: s52.S52Params | None = None,
         log(f"  [{n}/{len(cells)}] {c.name} 1:{c.scale:,} ed {c.edition} upd {c.last_updn}: "
             f"{len(kept)}/{len(feats)} features kept")
 
+    progress.report("composite", len(cells), len(cells))
     all_feats = _dedupe_points(all_feats)
     all_feats = _merge_split(all_feats, log=log)
     _fill_slivers(all_feats, covered, sliver_max_width_m, log=log)
@@ -380,6 +382,7 @@ def build(enc_root: str, out_dir: str, params: s52.S52Params | None = None,
     meta = {
         "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "source": os.path.abspath(enc_root),
+        "signature": source_signature(enc_root),
         "bounds": list(covered.bounds),
         "coverage": json.loads(shapely.to_geojson(cov_simpl)),
         "cells": cell_info,
@@ -402,6 +405,21 @@ def _write(fh, geom, props, mz) -> int:
     fh.write(head + ',"properties":' + json.dumps(props, separators=(",", ":"), ensure_ascii=False)
              + ',"geometry":' + shapely.to_geojson(geom) + "}\n")
     return 1
+
+
+def source_signature(enc_root: str) -> str:
+    """Fingerprint of the S-57 files (names, sizes, times) so a changed
+    exchange set triggers a new composite."""
+    import hashlib
+    import re
+    h = hashlib.sha1()
+    pat = re.compile(r"^[A-Za-z0-9_]{8}\.\d{3}$")
+    for dirpath, _d, files in sorted(os.walk(enc_root)):
+        for fn in sorted(files):
+            if pat.match(fn):
+                st = os.stat(os.path.join(dirpath, fn))
+                h.update(f"{os.path.relpath(os.path.join(dirpath, fn), enc_root)}|{st.st_size}|{int(st.st_mtime)}\n".encode())
+    return h.hexdigest()
 
 
 def load_meta(out_dir: str) -> dict:

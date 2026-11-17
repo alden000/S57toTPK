@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, asdict
 
 import shapely
 
-from . import s52
+from . import progress, s52
 from .mbtiles import StagingMBTiles
 
 
@@ -165,6 +165,7 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
         "minzoom": opts.minzoom, "maxzoom": opts.top_zoom, "tile_size": opts.tile_size,
         "bounds": ",".join(f"{v:.6f}" for v in meta["bounds"]), "scheme": opts.scheme,
     })
+    progress.report("render", len(done), len(blocks), scheme=opts.scheme)
     if not todo:
         st.finish()
         return out_path
@@ -263,6 +264,9 @@ async def _render(out_path, meta, tiles, opts: RenderOptions, log, stop_event):
                     stats["blocks"] += 1
                     stats["tiles"] += len(res)
                     nb = stats["blocks"]
+                    el = time.time() - t0
+                    progress.report("render", len(done) + nb, len(blocks), scheme=opts.scheme,
+                                    eta=round(el / nb * (total - nb)), zoom=z)
                     if nb == 1 or nb % 25 == 0 or nb == total:
                         el = time.time() - t0
                         eta = el / nb * (total - nb)

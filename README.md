@@ -5,19 +5,64 @@ plus `.001`, `.002` … updates) into an ArcGIS tile package (`.tpkx` and/or
 `.tpk`). The chart is drawn in S-52-style nautical symbology for offline use in
 ArcGIS apps. Input must be plain (unencrypted) S-57.
 
-It runs as a single portable Windows program (`s57totpk.exe`). Start it without
-arguments to get a small window, or use the command line.
+It runs as a single portable Windows program (`s57totpk.exe`). Double-click
+it to use the window; there is also a command line for scripting.
 
-## Quick start (Windows)
+## Using it (no command line needed)
+
+1. Double-click **s57totpk.exe**. A window opens.
+2. **Charts folder**: click *Browse…* and pick the `ENC_ROOT` folder of
+   your chart exchange set, the folder that holds one sub-folder per chart.
+   The window confirms how many charts it found.
+3. **Where to save**: pick a folder for the result, and give the package a
+   name.
+4. **How much detail**:
+   * *Overview*: the whole area down to about 1:72,000. Small and quick.
+   * *Standard (recommended)*: down to about 1:9,000.
+   * *Maximum*: down to about 1:4,500. Big areas can take many hours.
+   * *Custom*: pick the zoom levels yourself; the matching scales are shown.
+   * *Extra detail in one area*: tick it, click *Choose area on map…*, and
+     drag a box around a harbour on the map that opens in your browser. Only
+     that box gets the deeper zoom levels, which keeps time and file size
+     down.
+5. **Colours and package type**: Day / Dusk / Night (one package each), and
+   `.tpkx` (current ArcGIS: Pro 2.3+, Field Maps, ArcGIS Online) and/or
+   `.tpk` (older ArcGIS apps).
+6. Click **Start**. A progress bar shows how far along it is and roughly how
+   long is left. You can press **Stop** or close the window at any time.
+   Pressing **Start** later continues where it stopped.
+7. When it finishes, the window lists the files it made and offers to open
+   the folder. In ArcGIS Pro use *Add Data*. For Field Maps, copy the file to
+   the device or upload it to ArcGIS Online.
+
+*Preview chart* shows the chart in your web browser before you start, so you
+can check how it looks.
+
+The window remembers your choices for next time. *Show advanced settings*
+holds the less common options: tile sharpness, image format, the depths used
+for safety colouring, which browser to draw with, and how many to run at
+once.
+
+### Which browser?
+
+The chart is drawn by a browser running hidden in the background. By default
+this is **Microsoft Edge**, which every Windows 10/11 PC has; if Edge is
+missing it uses Google Chrome. Any Chromium-based browser works (Edge,
+Chrome, Brave, Vivaldi, Opera). Choose *Other…* under Advanced settings and
+point it at the browser's `.exe`. Firefox can't do the drawing step. The
+*Preview* opens in your normal browser, whichever that is.
+
+## Command line (optional)
 
 ```
 s57totpk.exe run --enc D:\charts\ENC_ROOT --out D:\charts\work
 ```
 
-This writes `D:\charts\work\ENC.tpkx`. It covers zoom 9–16 at 512 px
-(high-DPI) PNG tiles in the day colours. Some common options:
+Defaults: zoom 9–16, 512 px (high-DPI) PNG tiles, day colours, `.tpkx`.
+Useful options:
 
 ```
+--minzoom 9 --maxzoom 16                       zoom range
 --detail-bbox=-71.45,41.45,-71.30,41.52 --detail-maxzoom 18   deeper zooms over a port only
 --schemes day,dusk,night         one package per colour scheme
 --package tpkx,tpk               both package types
@@ -25,19 +70,15 @@ This writes `D:\charts\work\ENC.tpkx`. It covers zoom 9–16 at 512 px
 --format jpeg|mixed              smaller packages (mixed = JPEG where opaque, PNG at chart edges)
 --workers 3                      browser processes in parallel (default: auto from CPU count)
 --block 4                        smaller render blocks (default 8; uses less memory)
+--channel chrome | --browser C:\path\to\browser.exe     which Chromium-based browser draws the tiles
 --safety-depth 8 --safety-contour 10 --shallow-contour 2 --deep-contour 30
 --detach                         keep running in the background; progress in OUT\s57totpk.log
 ```
 
-Use a leading `=` for a bbox that starts with a minus sign (`--detail-bbox=-71.4,...`).
-
-A run you stop or that is interrupted picks up where it stopped. Rendered blocks
-are staged in `OUT\tiles-<scheme>.mbtiles.partial`; run the same command again
-to continue. For renders that take hours, use `--detach`, or the window's
-Run/Stop buttons, so the work is not tied to a console session.
-
-`s57totpk.exe preview --out D:\charts\work` opens the chart as an interactive
-map in your browser, so you can check the symbology before a long render.
+Write a bbox that starts with a minus sign with `=`, as in `--detail-bbox=-71.4,...`.
+`s57totpk.exe preview --out D:\charts\work --enc D:\charts\ENC_ROOT` opens
+the interactive preview. The charts are re-read automatically when the
+`ENC_ROOT` files or the depth settings change.
 
 ## Requirements
 

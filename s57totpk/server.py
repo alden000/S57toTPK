@@ -38,6 +38,18 @@ class _Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == "/selection" and self.server.on_selection:
+            n = int(self.headers.get("Content-Length") or 0)
+            try:
+                data = json.loads(self.rfile.read(n) or b"{}")
+                self.server.on_selection(data)
+                return self._send(200, b"{}", "application/json")
+            except Exception as e:  # noqa: BLE001
+                return self._send(400, str(e).encode(), "text/plain")
+        return self._send(404, b"not found", "text/plain")
+
     def do_HEAD(self):
         self.do_GET()
 
@@ -119,13 +131,14 @@ class _Server(ThreadingHTTPServer):
 
 class RenderServer:
     def __init__(self, tiles=None, glyphs=None, config: dict | None = None,
-                 extra_dirs: dict[str, str] | None = None, port: int = 0):
+                 extra_dirs: dict[str, str] | None = None, port: int = 0, on_selection=None):
         from .glyphs import GlyphMaker
         self.httpd = _Server(("127.0.0.1", port), _Handler)
         self.httpd.tiles = tiles
         self.httpd.glyphs = glyphs or GlyphMaker()
         self.httpd.config = config or {}
         self.httpd.extra_dirs = extra_dirs or {}
+        self.httpd.on_selection = on_selection
         self._t = threading.Thread(target=self.httpd.serve_forever, daemon=True)
 
     @property

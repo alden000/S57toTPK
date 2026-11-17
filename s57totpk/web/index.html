@@ -11,6 +11,22 @@
   #info { position: absolute; left: 8px; bottom: 8px; background: rgba(255,255,255,.85);
           font: 12px sans-serif; padding: 4px 6px; display: none; }
   body.preview #info { display: block; }
+  #panel { position: absolute; left: 10px; top: 10px; width: 300px; display: none;
+           background: #fff; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+           font: 14px "Segoe UI", Arial, sans-serif; padding: 12px; }
+  body.preview #panel { display: block; }
+  #panel h1 { font-size: 16px; margin: 0 0 8px; }
+  #panel p { margin: 6px 0; line-height: 1.35; }
+  #panel button { font: inherit; padding: 6px 10px; margin: 4px 4px 0 0; cursor: pointer; border-radius: 4px;
+                  border: 1px solid #888; background: #f3f3f3; }
+  #panel button.primary { background: #0067c0; color: #fff; border-color: #0067c0; }
+  #panel button:disabled { opacity: .45; cursor: default; }
+  #panel .schemes button.on { background: #444; color: #fff; }
+  #sel { display: none; border-top: 1px solid #ddd; margin-top: 10px; padding-top: 6px; }
+  body.select #sel { display: block; }
+  #selmsg { color: #333; }
+  #done { color: #0a7a22; font-weight: 600; }
+  body.drawing .maplibregl-canvas-container { cursor: crosshair; }
 </style>
 <script src="vendor/maplibre-gl.js"></script>
 <script src="symbols.js"></script>
@@ -19,6 +35,21 @@
 <body>
 <div id="map"></div>
 <div id="info"></div>
+<div id="panel">
+  <h1>Chart preview</h1>
+  <div class="schemes">Colours:
+    <button data-s="day">Day</button><button data-s="dusk">Dusk</button><button data-s="night">Night</button>
+  </div>
+  <p>Drag to move, scroll to zoom. Click a symbol to see what it is (bottom left).</p>
+  <div id="sel">
+    <p><b>Choose the extra-detail area</b> (for example a harbour). Click <i>Draw area</i>,
+       then press and drag on the map to draw a box.</p>
+    <button id="draw">Draw area</button>
+    <button id="use" class="primary" disabled>Use this area</button>
+    <p id="selmsg"></p>
+    <p id="done"></p>
+  </div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>

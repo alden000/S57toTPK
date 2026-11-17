@@ -28,6 +28,7 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 
+from . import progress
 from .mbtiles import MBTilesReader
 
 ORIGIN_X = -20037508.342787
@@ -153,15 +154,20 @@ class TileEncoder:
 
 def iter_bundles(src: MBTilesReader, enc: TileEncoder):
     """Yield (z, row0, col0, {(r, c): data}) for every non-empty bundle."""
+    total = max(1, src.count())
+    done = 0
     for z in src.zooms():
         keys = sorted({(y // PACKET, x // PACKET) for x, y in src.tiles_xyz(z)})
         for br, bc in keys:
+            progress.report("package", done, total)
             row0, col0 = br * PACKET, bc * PACKET
             tiles = {}
             for x, y, data in src.region(z, col0, col0 + PACKET - 1, row0, row0 + PACKET - 1):
                 tiles[(y - row0, x - col0)] = enc(data)
+            done += len(tiles)
             if tiles:
                 yield z, row0, col0, tiles
+    progress.report("package", total, total)
 
 
 # --------------------------------------------------------------- extents --

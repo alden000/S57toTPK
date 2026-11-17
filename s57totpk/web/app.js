@@ -45,16 +45,79 @@
   });
 
   if (preview) {
-    map.addControl(new maplibregl.NavigationControl());
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
     if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], {duration: 0});
     const info = document.getElementById('info');
-    const upd = () => { const c = map.getCenter(); info.textContent = `tile zoom ${(map.getZoom() + 1).toFixed(2)}  ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}  scheme ${cfg.scheme}`; };
+    const scaleAt = z => Math.round(591657527.591555 * Math.cos(map.getCenter().lat * Math.PI / 180) / Math.pow(2, z) / 1000) * 1000;
+    const upd = () => {
+      const z = map.getZoom() + 1;
+      info.textContent = `Zoom level ${z.toFixed(1)} (about 1:${scaleAt(z).toLocaleString('en-US')})`;
+    };
     map.on('move', upd); upd();
     map.on('click', e => {
-      const f = map.queryRenderedFeatures(e.point);
-      console.log(f.map(x => x.properties));
-      info.textContent = f.slice(0, 4).map(x => `${x.properties.OBJL} ${x.properties.OBJNAM || ''}`).join(' | ');
+      if (document.body.classList.contains('drawing')) return;
+      const f = map.queryRenderedFeatures(e.point).filter(x => x.properties && x.properties.OBJL);
+      if (f.length) info.textContent = f.slice(0, 3).map(x => `${x.properties.OBJL}${x.properties.OBJNAM ? ' ' + x.properties.OBJNAM : ''}`).join(' | ');
     });
+    for (const btn of document.querySelectorAll('.schemes button')) {
+      if (btn.dataset.s === cfg.scheme) btn.classList.add('on');
+      btn.onclick = () => { const u = new URL(location.href); u.searchParams.set('scheme', btn.dataset.s); location.href = u.toString(); };
+    }
+    if (q.has('select')) setupSelect(map);
+  }
+
+  function setupSelect(map) {
+    document.body.classList.add('select');
+    const drawBtn = document.getElementById('draw'), useBtn = document.getElementById('use');
+    const msg = document.getElementById('selmsg'), done = document.getElementById('done');
+    let start = null, box = null;
+    const empty = {type: 'FeatureCollection', features: []};
+    const rect = (a, c) => ({type: 'Feature', geometry: {type: 'Polygon', coordinates: [[
+      [a.lng, a.lat], [c.lng, a.lat], [c.lng, c.lat], [a.lng, c.lat], [a.lng, a.lat]]]}});
+    const addLayers = () => {
+      if (map.getSource('sel')) return;
+      map.addSource('sel', {type: 'geojson', data: empty});
+      map.addLayer({id: 'sel-fill', type: 'fill', source: 'sel', paint: {'fill-color': '#ff6a00', 'fill-opacity': 0.15}});
+      map.addLayer({id: 'sel-line', type: 'line', source: 'sel', paint: {'line-color': '#ff6a00', 'line-width': 2.5}});
+    };
+    map.loaded() ? addLayers() : map.once('load', addLayers);
+    const describe = () => {
+      const [w, s, e, n] = box;
+      const km = (a, b2) => (Math.abs(a - b2) * 111.32);
+      const wkm = km(w, e) * Math.cos((s + n) / 2 * Math.PI / 180), hkm = km(s, n);
+      msg.textContent = `Area about ${wkm.toFixed(1)} km × ${hkm.toFixed(1)} km.`;
+    };
+    drawBtn.onclick = () => {
+      document.body.classList.add('drawing');
+      map.dragPan.disable();
+      msg.textContent = 'Press and drag on the map to draw the box.';
+      done.textContent = '';
+    };
+    map.on('mousedown', e => {
+      if (!document.body.classList.contains('drawing')) return;
+      start = e.lngLat;
+    });
+    map.on('mousemove', e => {
+      if (!start) return;
+      map.getSource('sel').setData({type: 'FeatureCollection', features: [rect(start, e.lngLat)]});
+    });
+    map.on('mouseup', e => {
+      if (!start) return;
+      const a = start, c = e.lngLat;
+      start = null;
+      document.body.classList.remove('drawing');
+      map.dragPan.enable();
+      box = [Math.min(a.lng, c.lng), Math.min(a.lat, c.lat), Math.max(a.lng, c.lng), Math.max(a.lat, c.lat)];
+      if (box[2] - box[0] < 1e-4 || box[3] - box[1] < 1e-4) { box = null; msg.textContent = 'That box is too small; try again.'; return; }
+      map.getSource('sel').setData({type: 'FeatureCollection', features: [rect(a, c)]});
+      useBtn.disabled = false;
+      describe();
+    });
+    useBtn.onclick = async () => {
+      if (!box) return;
+      const r = await fetch('/selection', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({bbox: box})});
+      done.textContent = r.ok ? 'Area saved. You can close this tab and go back to the converter.' : 'Could not save the area (is the converter still open?)';
+    };
   }
 
   function idle() {

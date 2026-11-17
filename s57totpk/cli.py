@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 
-from . import __version__, s52
+from . import __version__, progress, s52
 
 
 class Logger:
@@ -113,6 +113,11 @@ def build_parser():
 
     p = sub.add_parser("preview", help="open the chart in an interactive browser map")
     _add_common(p)
+    p.add_argument("--enc", help="ENC_ROOT; the composite is made first if missing or out of date")
+    p.add_argument("--select", action="store_true", help="let the user draw an extra-detail area on the map")
+    p.add_argument("--exit-with-stdin", action="store_true", help=argparse.SUPPRESS)  # GUI: stop when the window goes
+    _add_s52(p)
+    p.add_argument("--sliver-width", type=float, default=200.0)
     p.add_argument("--scheme", default="day")
     p.add_argument("--port", type=int, default=0)
     p.add_argument("--no-open", action="store_true")
@@ -201,25 +206,51 @@ def do_package(a, log, mbtiles_paths=None):
     return outs
 
 
+def composite_is_current(a) -> bool:
+    import json as _json
+    from .composite import source_signature
+    p = os.path.join(a.out, "enc_meta.json")
+    if not os.path.exists(p):
+        return False
+    with open(p, encoding="utf-8") as fh:
+        meta = _json.load(fh)
+    return (meta.get("signature") == source_signature(a.enc)
+            and meta.get("params") == _params(a).to_dict())
+
+
 def do_preview(a, log):
     import webbrowser
     from .composite import load_meta
     from .render import RenderOptions, page_config
     from .server import RenderServer
+    if a.enc and not composite_is_current(a):
+        do_composite(a, log)
+    elif not os.path.exists(os.path.join(a.out, "enc_meta.json")):
+        raise UserError("No chart prepared yet in this output folder: choose the charts folder first.")
     meta = load_meta(a.out)
     a.tiler = "builtin"
     tiles = open_tiles(a, log)
     cfg = page_config(meta, RenderOptions(scheme=a.scheme, vmaxzoom=tiles.maxzoom))
-    srv = RenderServer(tiles=tiles, config=cfg, port=a.port).start()
-    url = f"{srv.url}/index.html?preview&scheme={a.scheme}"
+    def on_selection(d):
+        b = [round(float(v), 6) for v in d["bbox"]]
+        log(f"Extra-detail area chosen: {b[0]},{b[1]},{b[2]},{b[3]}")
+        progress.event("selection", bbox=b)
+
+    srv = RenderServer(tiles=tiles, config=cfg, port=a.port, on_selection=on_selection).start()
+    url = f"{srv.url}/index.html?preview&scheme={a.scheme}" + ("&select" if a.select else "")
     log(f"Preview at {url}  (Ctrl+C to stop)")
+    progress.event("preview", url=url)
     if not a.no_open:
         webbrowser.open(url)
+    stop = threading.Event()
+    if a.exit_with_stdin:  # the GUI holds our stdin open; EOF means the window is gone
+        threading.Thread(target=lambda: (sys.stdin.read(), stop.set()), daemon=True).start()
     try:
-        while True:
-            time.sleep(1)
+        while not stop.wait(1):
+            pass
     except KeyboardInterrupt:
-        srv.stop()
+        pass
+    srv.stop()
 
 
 def do_inspect(a, log):
@@ -254,8 +285,51 @@ def _detach(argv, out, log):
     log(f"Started in background (pid {p.pid}); progress: {os.path.join(out, 's57totpk.log')}")
 
 
+class UserError(Exception):
+    """A problem the user can fix; shown without a traceback."""
+
+
+def _friendly(e: BaseException) -> str:
+    msg = str(e)
+    if "Could not start a browser" in msg:
+        return ("No usable browser was found. Microsoft Edge or Google Chrome is needed to draw the chart.\n"
+                "Install one, or choose the browser program under Advanced settings.")
+    if "No S-57 base cells" in msg:
+        return ("No S-57 chart files (.000) were found in that folder.\n"
+                "Choose the ENC_ROOT folder of the exchange set (the one holding the chart folders).")
+    if isinstance(e, MemoryError) or "out of memory" in msg.lower():
+        return "The computer ran out of memory. Try fewer parallel browsers or smaller blocks (Advanced settings)."
+    if isinstance(e, PermissionError):
+        return f"Windows refused access to a file or folder:\n{e.filename or msg}\nChoose another output folder."
+    if isinstance(e, OSError) and getattr(e, "errno", None) == 28:
+        return "The disk is full. Free some space or choose an output folder on another drive."
+    return msg
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    try:
+        return _main(argv)
+    except KeyboardInterrupt:
+        return 130
+    except SystemExit as e:
+        if not isinstance(e.code, str):
+            raise
+        text = _friendly(UserError(e.code))   # argument / input problems raised as SystemExit("message")
+        progress.event("error", message=text)
+        sys.stderr.write("ERROR: " + text + "\n")
+        return 1
+    except BaseException as e:  # noqa: BLE001 - report every failure plainly
+        import traceback
+        text = _friendly(e)
+        progress.event("error", message=text)
+        sys.stderr.write("ERROR: " + text + "\n")
+        if not isinstance(e, UserError):
+            traceback.print_exc()
+        return 1
+
+
+def _main(argv):
     if not argv:
         from .gui import main as gui_main
         return gui_main()
@@ -280,11 +354,12 @@ def main(argv=None):
     elif a.cmd == "preview":
         do_preview(a, log)
     elif a.cmd == "run":
-        if a.recomposite or not os.path.exists(os.path.join(a.out, "enc_meta.json")):
+        if a.recomposite or not composite_is_current(a):
             do_composite(a, log)
         else:
-            log("Composite exists (use --recomposite to redo)")
+            log("Charts unchanged since the last run: reusing the prepared data")
         paths = do_render(a, log)
-        do_package(a, log, paths)
+        outs = do_package(a, log, paths)
         log(f"All done in {(time.time() - t0) / 60:.1f} min")
+        progress.event("result", files=[os.path.abspath(o) for o in outs])
     return 0
