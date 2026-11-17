@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>S-57 chart</title>
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  body.preview { background: #888; }
+  #info { position: absolute; left: 8px; bottom: 8px; background: rgba(255,255,255,.85);
+          font: 12px sans-serif; padding: 4px 6px; display: none; }
+  body.preview #info { display: block; }
+</style>
+<script src="vendor/maplibre-gl.js"></script>
+<script src="symbols.js"></script>
+<script src="style.js"></script>
+</head>
+<body>
+<div id="map"></div>
+<div id="info"></div>
+<script src="app.js"></script>
+</body>
+</html>

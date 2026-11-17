@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "s57totpk"
+dynamic = ["version"]
+description = "S-57 ENC to ArcGIS tile package (.tpkx/.tpk) converter with S-52 style symbology"
+requires-python = ">=3.10"
+dependencies = [
+  "pyogrio>=0.9",
+  "shapely>=2.1",
+  "numpy>=1.24",
+  "pillow>=10.1",
+  "playwright>=1.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "rasterio", "pyinstaller"]
+
+[project.scripts]
+s57totpk = "s57totpk.cli:main"
+
+[tool.setuptools]
+packages = ["s57totpk"]
+
+[tool.setuptools.dynamic]
+version = {attr = "s57totpk.__version__"}
+
+[tool.setuptools.package-data]
+s57totpk = ["web/*", "web/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
