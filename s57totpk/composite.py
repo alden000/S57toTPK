@@ -80,12 +80,51 @@ def _clean(v):
     return v
 
 
+# ------------------------------------------------------------- robustness --
+# Real ENC data contains self-crossing or self-touching areas. GEOS overlay
+# operations fail on those ("TopologyException: side location conflict"), so
+# areas are repaired when read, and every overlay goes through _safe().
+GEOSError = shapely.errors.GEOSException
+
+
+def _make_valid(g):
+    """Valid version of g (structure method keeps what the rings enclose)."""
+    if g is None or g.is_empty or g.is_valid:
+        return g
+    try:
+        return shapely.make_valid(g, method="structure", keep_collapsed=False)
+    except (TypeError, ValueError, GEOSError):  # older GEOS / shapely
+        return shapely.make_valid(g)
+
+
+def _repair_area(g):
+    g = _make_valid(g)
+    return _keep_dim(g, "A") if g is not None and not g.is_empty else None
+
+
+def _safe(fn, *geoms, **kw):
+    """Run a GEOS overlay; on a topology error repair the inputs and retry,
+    then retry without snapping to the grid."""
+    try:
+        return fn(*geoms, **kw)
+    except GEOSError:
+        pass
+    fixed = [np.array([_make_valid(x) for x in g], dtype=object) if isinstance(g, np.ndarray) else _make_valid(g)
+             for g in geoms]
+    try:
+        return fn(*fixed, **kw)
+    except GEOSError:
+        kw.pop("grid_size", None)
+        return fn(*fixed, **kw)
+
+
 def read_cell(path: str, cell: Cell, log=print) -> tuple[list[Feature], object]:
     import pyogrio
     from pyogrio.raw import read
 
     feats: list[Feature] = []
     cov_in, cov_out = [], []
+    repaired = 0
     for name, _gt in pyogrio.list_layers(path):
         if name in SKIP_LAYERS or (name.startswith("M_") and name != "M_COVR"):
             continue
@@ -108,17 +147,25 @@ def read_cell(path: str, cell: Cell, log=print) -> tuple[list[Feature], object]:
                 v = _clean(arr[i])
                 if v is not None:
                     attrs[c] = v
+            gt = _gtype(g)
+            if gt == "A" and not g.is_valid:
+                g = _repair_area(g)
+                repaired += 1
+                if g is None:
+                    continue
             if name == "M_COVR":
                 (cov_in if attrs.get("CATCOV", 1) == 1 else cov_out).append(g)
                 continue
-            gt = _gtype(g)
             if gt is None:
                 continue
             feats.append(Feature(name, gt, g, attrs, cell.name, cell.scale))
+    if repaired:
+        log(f"  {cell.name}: repaired {repaired} damaged area shape(s)")
     if cov_in:
-        cov = shapely.union_all(shapely.make_valid(np.array(cov_in)), grid_size=GRID)
+        cov = _safe(shapely.union_all, np.array(cov_in, dtype=object), grid_size=GRID)
         if cov_out:
-            cov = shapely.difference(cov, shapely.union_all(np.array(cov_out), grid_size=GRID), grid_size=GRID)
+            cov = _safe(shapely.difference, cov, _safe(shapely.union_all, np.array(cov_out, dtype=object), grid_size=GRID),
+                        grid_size=GRID)
     else:  # no M_COVR: fall back to the extent of the data
         xs = shapely.bounds(np.array([f.geom for f in feats])) if feats else None
         cov = shapely.box(xs[:, 0].min(), xs[:, 1].min(), xs[:, 2].max(), xs[:, 3].max()) if feats else shapely.Polygon()
@@ -140,8 +187,16 @@ def _clip(feats: list[Feature], region) -> list[Feature]:
     clipped = {}
     if len(todo):
         sub = geoms[todo]
-        sub = np.where(shapely.is_valid(sub), sub, shapely.make_valid(sub))
-        res = shapely.intersection(sub, region, grid_size=GRID)
+        sub = np.array([_make_valid(g) for g in sub], dtype=object)
+        try:
+            res = shapely.intersection(sub, region, grid_size=GRID)
+        except GEOSError:  # find the offending feature(s) one by one
+            res = []
+            for g in sub:
+                try:
+                    res.append(_safe(shapely.intersection, g, region, grid_size=GRID))
+                except GEOSError:
+                    res.append(g)  # keep it unclipped rather than lose it
         clipped = dict(zip(todo.tolist(), res))
     for i, f in enumerate(feats):
         if inside[i]:
@@ -168,7 +223,7 @@ def _keep_dim(g, gtype):
         parts = [p for p in shapely.get_parts(g) if shapely.get_type_id(p) in want + ((2,) if gtype == "L" else ())]
         if not parts:
             return None
-        return shapely.union_all(np.array(parts)) if len(parts) > 1 else parts[0]
+        return _safe(shapely.union_all, np.array(parts, dtype=object)) if len(parts) > 1 else parts[0]
     if gtype == "L" and t == 2:
         return g
     return None
@@ -195,12 +250,17 @@ def _merge_split(feats: list[Feature], log=print) -> list[Feature]:
             keep.extend(fs)
             continue
         geoms = np.array([f.geom for f in fs], dtype=object)
-        if fs[0].gtype == "A":
-            u = shapely.union_all(geoms, grid_size=GRID)
-            parts = [p for p in shapely.get_parts(u) if shapely.get_type_id(p) == 3]
-        else:
-            u = shapely.line_merge(shapely.union_all(geoms, grid_size=GRID))
-            parts = [p for p in shapely.get_parts(u) if shapely.get_type_id(p) in (1, 2)]
+        try:
+            if fs[0].gtype == "A":
+                u = _safe(shapely.union_all, geoms, grid_size=GRID)
+                parts = [p for p in shapely.get_parts(u) if shapely.get_type_id(p) == 3]
+            else:
+                u = shapely.line_merge(_safe(shapely.union_all, geoms, grid_size=GRID))
+                parts = [p for p in shapely.get_parts(u) if shapely.get_type_id(p) in (1, 2)]
+        except GEOSError as e:
+            log(f"  could not rejoin {fs[0].objl} pieces ({e}); kept them separate")
+            keep.extend(fs)
+            continue
         scamins = [f.attrs.get("SCAMIN") for f in fs]
         scamin = None if any(s is None for s in scamins) else max(scamins)
         merged_n += len(fs) - len(parts)
@@ -238,8 +298,12 @@ def _fill_slivers(feats: list[Feature], covered, max_width_m: float, log=print) 
     if not skin_idx or covered.is_empty:
         return
     skin = np.array([feats[i].geom for i in skin_idx], dtype=object)
-    skin_union = shapely.union_all(skin, grid_size=GRID)
-    gaps = shapely.difference(covered, skin_union, grid_size=GRID)
+    try:
+        skin_union = _safe(shapely.union_all, skin, grid_size=GRID)
+        gaps = _safe(shapely.difference, covered, skin_union, grid_size=GRID)
+    except GEOSError as e:
+        log(f"  gaps between charts not filled ({e})")
+        return
     parts = [g for g in shapely.get_parts(gaps) if shapely.get_type_id(g) == 3 and g.area > 0]
     if not parts:
         return
@@ -259,12 +323,19 @@ def _fill_slivers(feats: list[Feature], covered, max_width_m: float, log=print) 
         if len(cand) == 0:
             skipped += 1
             continue
-        best = max(cand, key=lambda j: shapely.intersection(g.boundary, skin[j].buffer(GRID * 5)).length)
+        try:
+            best = max(cand, key=lambda j: _safe(shapely.intersection, g.boundary, skin[j].buffer(GRID * 5)).length)
+        except GEOSError:
+            skipped += 1
+            continue
         adds[int(best)].append(g)
         filled += 1
     for j, gs in adds.items():
         f = feats[skin_idx[j]]
-        f.geom = shapely.union_all(np.array([f.geom] + gs, dtype=object), grid_size=GRID)
+        try:
+            f.geom = _safe(shapely.union_all, np.array([f.geom] + gs, dtype=object), grid_size=GRID)
+        except GEOSError:
+            skipped += len(gs)
     log(f"  skin-of-earth slivers filled: {filled}" + (f" (left {skipped} wider gaps)" if skipped else ""))
 
 
@@ -335,8 +406,8 @@ def build(enc_root: str, out_dir: str, params: s52.S52Params | None = None,
     for n, c in enumerate(cells, 1):
         progress.report("composite", n - 1, len(cells), cell=c.name)
         feats, cov = read_cell(c.staged, c, log=log)
-        eff = shapely.difference(cov, covered, grid_size=GRID) if not covered.is_empty else cov
-        covered = shapely.union(covered, cov, grid_size=GRID)
+        eff = _safe(shapely.difference, cov, covered, grid_size=GRID) if not covered.is_empty else cov
+        covered = _safe(shapely.union, covered, cov, grid_size=GRID)
         safety = _safety_valdco(feats, params)
         kept = _clip(feats, eff)
         safety_by_cell[c.name] = safety

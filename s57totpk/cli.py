@@ -297,6 +297,9 @@ def _friendly(e: BaseException) -> str:
     if "No S-57 base cells" in msg:
         return ("No S-57 chart files (.000) were found in that folder.\n"
                 "Choose the ENC_ROOT folder of the exchange set (the one holding the chart folders).")
+    if "TopologyException" in msg:
+        return ("A chart contains a damaged shape that could not be repaired automatically:\n" + msg +
+                "\nPlease send the log file (s57totpk.log in the output folder) so this can be fixed.")
     if isinstance(e, MemoryError) or "out of memory" in msg.lower():
         return "The computer ran out of memory. Try fewer parallel browsers or smaller blocks (Advanced settings)."
     if isinstance(e, PermissionError):
